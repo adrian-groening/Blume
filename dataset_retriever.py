@@ -68,7 +68,8 @@ def save_aggs_to_csv(aggs, filename):
 
 day = "2025-05-20"
 d1 = get_aggs(day, day, "2025-05-21")
-save_aggs_to_csv(d1, f'{day}_aggs.csv')
+#save_aggs_to_csv(d1, f'{day}_aggs.csv')
+pprint(d1)
 
 
 
