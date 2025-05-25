@@ -14,22 +14,30 @@ import tensorflow as tf
 may20 = pd.read_csv('2025-05-20_aggs.csv')
 may21 = pd.read_csv('2025-05-21_aggs.csv')
 may22 = pd.read_csv('2025-05-22_aggs.csv')
+may23 = pd.read_csv('2025-05-23_aggs.csv')
 
 # importing the dataset
-df = pd.concat([may20, may21, may22], ignore_index=True)
+df = pd.concat([may20, may21, may22, may23], ignore_index=True)
+df = df.drop(columns=['OTC'])
 
 # Convert 'Timestamp' to datetime and ensure correct data types
 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
 
 # addtional features to find extra patterns in the data
-#df['hour'] = df['Timestamp'].dt.hour
-#df['minute'] = df['Timestamp'].dt.minute
-#df['dayofweek'] = df['Timestamp'].dt.dayofweek
+df['hour'] = df['Timestamp'].dt.hour
+df['minute'] = df['Timestamp'].dt.minute
+df['dayofweek'] = df['Timestamp'].dt.dayofweek
 
-#for lag in range(1, 6):  # past 5 minutes
-#    df[f'Close_lag_{lag}'] = df['Close'].shift(lag)
-#    df[f'Volume_lag_{lag}'] = df['Volume'].shift(lag)
-#    df[f'VWAP_lag_{lag}'] = df['VWAP'].shift(lag)
+for lag in range(1, 6):  # past 5 minutes
+    df[f'Close_lag_{lag}'] = df['Close'].shift(lag)
+    df[f'Volume_lag_{lag}'] = df['Volume'].shift(lag)
+    df[f'VWAP_lag_{lag}'] = df['VWAP'].shift(lag)
+
+df.dropna(inplace=True)
+
+
+
+    
 
 # split the data into training and testing sets
 #df_train  = df[df['Timestamp'] < '2025-05-22 12:00:00']
@@ -44,17 +52,6 @@ datetime = df.pop('Timestamp')
 #print(datetime)
 #print(df_train.head())
 #print(df_train.describe().transpose())
-
-
-
-X_train = None
-y_train = None
-
-X_test = None
-y_test = None
-
-
-
 
 #print to text file
 #with open('df_train.txt', 'w') as f:
@@ -75,6 +72,7 @@ df['Year cos'] = np.cos(timestamp_s * (2 * np.pi / year))
 #plt.title('Time of day signal')
 
 #plt.show()
+
 
 column_indices = {name: i for i, name in enumerate(df.columns)}
 
@@ -99,7 +97,9 @@ df_std = df_std.melt(var_name='Column', value_name='Normalized')
 plt.figure(figsize=(12, 6))
 ax = sns.violinplot(x='Column', y='Normalized', data=df_std)
 _ = ax.set_xticklabels(df.keys(), rotation=90)
-plt.show()
+#plt.show()
+
+
 
 class WindowGenerator():
   def __init__(self, input_width, label_width, shift,
@@ -140,14 +140,17 @@ class WindowGenerator():
         f'Label column name(s): {self.label_columns}'])
   
 
-w1 = WindowGenerator(input_width=24, label_width=1, shift=24,
-                     label_columns=['Open'])
+w1 = WindowGenerator(input_width=60, label_width=5, shift=1,
+                     label_columns=['Close'])
 
 print(w1)
 
-w2 = WindowGenerator(input_width=6, label_width=1, shift=1,
+w2 = WindowGenerator(input_width=10, label_width=1, shift=1,
                      label_columns=['Close'])
+
 print(w2)
+
+
 
 def split_window(self, features):
   inputs = features[:, self.input_slice, :]
@@ -166,6 +169,8 @@ def split_window(self, features):
 
 WindowGenerator.split_window = split_window
 
+
+
 # Stack three slices, the length of the total window.
 example_window = tf.stack([np.array(train_df[:w2.total_window_size]),
                            np.array(train_df[100:100+w2.total_window_size]),
@@ -178,7 +183,10 @@ print(f'Window shape: {example_window.shape}')
 print(f'Inputs shape: {example_inputs.shape}')
 print(f'Labels shape: {example_labels.shape}')
 
+
+
 w2.example = example_inputs, example_labels
+
 
 def plot(self, model=None, plot_col='Close', max_subplots=3):
   inputs, labels = self.example
@@ -215,7 +223,8 @@ def plot(self, model=None, plot_col='Close', max_subplots=3):
 WindowGenerator.plot = plot
 
 w2.plot()
-#plt.show()
+plt.show()
+
 
 def make_dataset(self, data):
   data = np.array(data, dtype=np.float32)
@@ -237,13 +246,19 @@ WindowGenerator.make_dataset = make_dataset
 def train(self):
   return self.make_dataset(self.train_df)
 
+WindowGenerator.train = train
+
 @property
 def val(self):
   return self.make_dataset(self.val_df)
 
+WindowGenerator.val = val
+
 @property
 def test(self):
   return self.make_dataset(self.test_df)
+
+WindowGenerator.test = test
 
 @property
 def example(self):
@@ -314,13 +329,17 @@ linear = tf.keras.Sequential([
     tf.keras.layers.Dense(units=1),
     tf.keras.layers.Dense(units=1),
     tf.keras.layers.Dense(units=1),
+    tf.keras.layers.Dense(units=1),
+    tf.keras.layers.Dense(units=1),
+    tf.keras.layers.Dense(units=1),
+    tf.keras.layers.Dense(units=1),
     tf.keras.layers.Dense(units=1)
 ])
 
 print('Input shape:', single_step_window.example[0].shape)
 print('Output shape:', linear(single_step_window.example[0]).shape)
 
-MAX_EPOCHS = 20
+MAX_EPOCHS = 50
 
 def compile_and_fit(model, window, patience=2):
   early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
@@ -343,3 +362,8 @@ performance['Linear'] = linear.evaluate(single_step_window.test, verbose=0, retu
 
 print('Input shape:', wide_window.example[0].shape)
 print('Output shape:', linear(wide_window.example[0]).shape)
+
+plt.show()
+
+print(train_df.info())
+
